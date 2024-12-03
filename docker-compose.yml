@@ -1,0 +1,90 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/node/Dockerfile
+      args:
+        NODE_ENV: production
+    container_name: innovation-app
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - JWT_SECRET=${JWT_SECRET}
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    ports:
+      - "3000:3000"
+    networks:
+      - innovation_net
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mariadb:10.11
+    container_name: innovation-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./docker/mariadb/conf.d:/etc/mysql/conf.d:ro
+      - ./docker/mariadb/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:3306:3306"
+    networks:
+      - innovation_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: innovation-phpmyadmin
+    restart: unless-stopped
+    environment:
+      - PMA_HOST=db
+      - PMA_PORT=3306
+      - UPLOAD_LIMIT=128M
+      - MEMORY_LIMIT=512M
+      - MAX_EXECUTION_TIME=300
+    volumes:
+      - ./docker/phpmyadmin/config.user.inc.php:/etc/phpmyadmin/config.user.inc.php:ro
+      - ./docker/phpmyadmin/sessions:/sessions
+    networks:
+      - innovation_net
+    depends_on:
+      - db
+
+  gitbook:
+    image: fellah/gitbook:latest
+    container_name: innovation-docs
+    restart: unless-stopped
+    volumes:
+      - ./docs:/srv/gitbook
+    ports:
+      - "4000:4000"
+      - "35729:35729"
+    environment:
+      - TITLE=Red de Innovación FP
+      - DESCRIPTION=Documentación del sistema
+    networks:
+      - innovation_net
+
+networks:
+  innovation_net:
+    driver: bridge
+
+volumes:
+  db_data:
